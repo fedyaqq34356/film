@@ -3,7 +3,9 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
+
 from config import BOT_TOKEN
+from config import ai_service
 from handlers import start, search
 from handlers.advanced_search import router as advanced_router
 

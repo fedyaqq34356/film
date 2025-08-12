@@ -16,3 +16,6 @@ class AdvancedSearchStates(StatesGroup):
     waiting_for_region = State()
     waiting_for_adult_content = State()
     waiting_for_sort = State()
+
+class MovieSelectionState(StatesGroup):
+    waiting_for_movie_choice = State()

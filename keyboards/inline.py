@@ -7,6 +7,7 @@ def get_main_menu() -> InlineKeyboardMarkup:
     keyboard = [
         [InlineKeyboardButton(text="🔍 Простой поиск", callback_data="simple_search")],
         [InlineKeyboardButton(text="🎯 Расширенный поиск", callback_data="advanced_search")],
+        [InlineKeyboardButton(text="🤖 Персональные рекомендации", callback_data="ai_recommendations")],
         [InlineKeyboardButton(text="ℹ️ Помощь", callback_data="help")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
@@ -16,6 +17,14 @@ def get_skip_button() -> InlineKeyboardMarkup:
     """Кнопка пропустить."""
     keyboard = [
         [InlineKeyboardButton(text="⏭ Пропустить", callback_data="skip")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_movie_selection_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для выбора фильма пользователем."""
+    keyboard = [
+        [InlineKeyboardButton(text="⏭ Пропустить", callback_data="skip_movie_choice")],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -83,8 +92,8 @@ def get_genres_keyboard(genres: Dict[str, int], selected: List[int] = None) -> I
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-def get_pagination_keyboard(current_page: int, total_pages: int, prefix: str = "page") -> InlineKeyboardMarkup:
-    """Клавиатура пагинации."""
+def get_pagination_with_movie_choice_keyboard(current_page: int, total_pages: int, prefix: str = "page") -> InlineKeyboardMarkup:
+    """Клавиатура пагинации С кнопкой выбора фильма."""
     keyboard = []
     
     # Навигация по страницам
@@ -113,6 +122,9 @@ def get_pagination_keyboard(current_page: int, total_pages: int, prefix: str = "
         if quick_nav:
             keyboard.append(quick_nav)
     
+    # ДОБАВИТЬ кнопку выбора фильма
+    keyboard.append([InlineKeyboardButton(text="🎬 Выбрать фильм", callback_data="ask_movie_choice")])
+    
     # Кнопки действий
     keyboard.append([
         InlineKeyboardButton(text="🔄 Новый поиск", callback_data="new_search"),
@@ -120,6 +132,7 @@ def get_pagination_keyboard(current_page: int, total_pages: int, prefix: str = "
     ])
     
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
 
 
 def get_movie_details_keyboard(movie_id: int) -> InlineKeyboardMarkup:

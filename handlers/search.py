@@ -3,17 +3,19 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from typing import List, Dict, Any
 
-from states.search_states import SimpleSearchStates, AdvancedSearchStates
-from keyboards.inline import (
-    get_skip_button, get_genres_keyboard, get_pagination_keyboard,
-    get_yes_no_keyboard, get_sort_options_keyboard, get_main_menu
-)
+from config import ai_service, MESSAGES, MOVIES_PER_PAGE
+from states.search_states import SimpleSearchStates, AdvancedSearchStates, MovieSelectionState
 from services.tmdb_api import TMDBApi
+from services.ai_service import AIRecommendationService
 from utils.formatters import (
     format_movies_page, format_genre_selection, format_search_params,
     format_error_message, format_movie_details
 )
-from config import MESSAGES, MOVIES_PER_PAGE
+from keyboards.inline import (
+    get_skip_button, get_genres_keyboard,
+    get_yes_no_keyboard, get_sort_options_keyboard, get_main_menu,
+    get_movie_selection_keyboard, get_pagination_with_movie_choice_keyboard
+)
 
 router = Router()
 tmdb_api = TMDBApi()
@@ -198,7 +200,10 @@ async def execute_simple_search(message, state: FSMContext, edit: bool = False):
             total_pages = (len(movies) + MOVIES_PER_PAGE - 1) // MOVIES_PER_PAGE
             
             error_text = format_movies_page(movies, 1, MOVIES_PER_PAGE)
-            keyboard = get_pagination_keyboard(1, total_pages, "search_page")
+            error_text += "\n\n💡 Выберите понравившийся фильм для персональных рекомендаций!"
+            
+            # Добавляем кнопку выбора фильма
+            keyboard = get_pagination_with_movie_choice_keyboard(1, total_pages, "search_page")
         
         if loading_msg:
             await loading_msg.delete()
@@ -219,6 +224,7 @@ async def execute_simple_search(message, state: FSMContext, edit: bool = False):
             await message.edit_text(error_text, reply_markup=keyboard, parse_mode="HTML")
         else:
             await message.answer(error_text, reply_markup=keyboard, parse_mode="HTML")
+
 
 
 # ===== РАСШИРЕННЫЙ ПОИСК =====
@@ -259,7 +265,10 @@ async def search_pagination(callback: CallbackQuery, state: FSMContext):
         await state.update_data(current_page=page)
         
         text = format_movies_page(movies, page, MOVIES_PER_PAGE)
-        keyboard = get_pagination_keyboard(page, total_pages, "search_page")
+        text += "\n\n💡 Выберите понравившийся фильм для персональных рекомендаций!"  # ДОБАВИТЬ
+        
+        # ЗАМЕНИТЬ НА НОВУЮ ФУНКЦИЮ клавиатуры
+        keyboard = get_pagination_with_movie_choice_keyboard(page, total_pages, "search_page")
         
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     
@@ -319,7 +328,114 @@ async def back_to_results(callback: CallbackQuery, state: FSMContext):
     
     total_pages = (len(movies) + MOVIES_PER_PAGE - 1) // MOVIES_PER_PAGE
     text = format_movies_page(movies, current_page, MOVIES_PER_PAGE)
-    keyboard = get_pagination_keyboard(current_page, total_pages, "search_page")
+    keyboard = get_pagination_with_movie_choice_keyboard(current_page, total_pages, "search_page")
     
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "ai_recommendations")
+async def show_ai_recommendations(callback: CallbackQuery, state: FSMContext):
+    """Показать AI рекомендации."""
+    user_id = callback.from_user.id
+    
+    try:
+        genres_map = await tmdb_api.get_genres()
+        recommendations = await ai_service.get_ai_recommendations(user_id, genres_map)
+        
+        text = MESSAGES['ai_recommendations'].format(recommendations=recommendations)
+        await callback.message.edit_text(
+            text,
+            reply_markup=get_main_menu(),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        print(f"[ERROR] AI recommendations failed: {e}")
+        await callback.message.edit_text(
+            "❌ Не удалось получить рекомендации. Попробуйте позже.",
+            reply_markup=get_main_menu(),
+            parse_mode="HTML"
+        )
+    
+    await callback.answer()
+
+@router.callback_query(F.data == "ask_movie_choice")
+async def ask_movie_choice(callback: CallbackQuery, state: FSMContext):
+    """Запрос выбора фильма пользователем."""
+    await state.set_state(MovieSelectionState.waiting_for_movie_choice)
+    
+    await callback.message.edit_text(
+        MESSAGES['ask_movie_choice'],
+        reply_markup=get_movie_selection_keyboard(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+@router.message(MovieSelectionState.waiting_for_movie_choice)
+async def process_movie_choice(message: Message, state: FSMContext):
+    """Обработка выбора фильма пользователем."""
+    user_id = message.from_user.id
+    choice = message.text.strip()
+    
+    try:
+        data = await state.get_data()
+        movies = data.get("movies", [])
+        selected_genres = data.get("genre_ids", [])
+        
+        # Ищем фильм по названию или ID
+        selected_movie = None
+        
+        if choice.isdigit():
+            # Поиск по ID в списке результатов
+            movie_id = int(choice)
+            selected_movie = next((m for m in movies if m.get("id") == movie_id), None)
+            
+            # Если не найден в списке, попробуем получить из API
+            if not selected_movie:
+                selected_movie = await tmdb_api.get_movie_details(movie_id)
+        else:
+            # Поиск по названию
+            choice_lower = choice.lower()
+            selected_movie = next(
+                (m for m in movies if choice_lower in m.get("title", "").lower() or 
+                 choice_lower in m.get("original_title", "").lower()), 
+                None
+            )
+        
+        if selected_movie:
+            # Сохраняем предпочтения пользователя
+            ai_service.save_user_preference(user_id, selected_genres, selected_movie)
+            
+            await message.answer(
+                MESSAGES['movie_saved'],
+                reply_markup=get_main_menu(),
+                parse_mode="HTML"
+            )
+        else:
+            await message.answer(
+                "❌ Фильм не найден. Попробуйте ввести точное название или выберите из результатов поиска.",
+                reply_markup=get_movie_selection_keyboard(),
+                parse_mode="HTML"
+            )
+            return
+    
+    except Exception as e:
+        print(f"[ERROR] Movie choice processing failed: {e}")
+        await message.answer(
+            "❌ Произошла ошибка. Попробуйте еще раз.",
+            reply_markup=get_main_menu(),
+            parse_mode="HTML"
+        )
+    
+    await state.clear()
+
+@router.callback_query(F.data == "skip_movie_choice")
+async def skip_movie_choice(callback: CallbackQuery, state: FSMContext):
+    """Пропуск выбора фильма."""
+    await state.clear()
+    await callback.message.edit_text(
+        MESSAGES['start'],
+        reply_markup=get_main_menu(),
+        parse_mode="HTML"
+    )
     await callback.answer()

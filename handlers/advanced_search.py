@@ -2,17 +2,28 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
-from states.search_states import AdvancedSearchStates
-from keyboards.inline import (
-    get_skip_button, get_yes_no_keyboard, get_sort_options_keyboard,
-    get_pagination_keyboard, get_main_menu
-)
+from config import ai_service, MESSAGES, MOVIES_PER_PAGE
+from states.search_states import SimpleSearchStates, AdvancedSearchStates, MovieSelectionState
 from services.tmdb_api import TMDBApi
 from services.movie_service import MovieService
+from services.ai_service import AIRecommendationService
 from utils.formatters import (
-    format_movies_page, format_error_message, format_search_params
+    format_movies_page, format_genre_selection, format_search_params,
+    format_error_message, format_movie_details
 )
-from config import MESSAGES, MOVIES_PER_PAGE
+from keyboards.inline import (
+    get_skip_button,
+    get_genres_keyboard,
+    get_yes_no_keyboard,
+    get_sort_options_keyboard,
+    get_main_menu,
+    get_movie_selection_keyboard,
+    # Импортируем с алиасом, чтобы везде использовать короткое имя
+    get_pagination_with_movie_choice_keyboard as get_pagination_keyboard,
+)
+from keyboards.inline import get_pagination_with_movie_choice_keyboard
+
+
 
 router = Router()
 tmdb_api = TMDBApi()
@@ -245,7 +256,10 @@ async def execute_advanced_search(message, state: FSMContext, edit: bool = False
             total_pages = (len(movies) + MOVIES_PER_PAGE - 1) // MOVIES_PER_PAGE
             
             result_text = format_movies_page(movies, 1, MOVIES_PER_PAGE)
-            keyboard = get_pagination_keyboard(1, total_pages, "search_page")
+            result_text += "\n\n💡 Выберите понравившийся фильм для персональных рекомендаций!"  # ДОБАВИТЬ
+            
+            # ЗАМЕНИТЬ НА НОВУЮ ФУНКЦИЮ клавиатуры
+            keyboard = get_pagination_with_movie_choice_keyboard(1, total_pages, "search_page")
         
         await message.edit_text(result_text, reply_markup=keyboard, parse_mode="HTML")
             
@@ -255,7 +269,6 @@ async def execute_advanced_search(message, state: FSMContext, edit: bool = False
         keyboard = get_main_menu()
         
         await message.edit_text(error_text, reply_markup=keyboard, parse_mode="HTML")
-
 
 # Обработка года для расширенного поиска (после выбора жанров)
 @router.message(AdvancedSearchStates.waiting_for_year)

@@ -9,6 +9,7 @@ def format_movie_short(movie: Dict[str, Any], index: int) -> str:
     release_date = movie.get("release_date", "")
     rating = movie.get("vote_average", 0)
     vote_count = movie.get("vote_count", 0)
+    movie_id = movie.get("id", "N/A")  # ДОБАВИТЬ ЭТУ СТРОКУ
     
     # Форматируем дату
     year = ""
@@ -29,7 +30,7 @@ def format_movie_short(movie: Dict[str, Any], index: int) -> str:
     if vote_count > 0:
         rating_text += f" ({vote_count:,} оценок)"
     
-    return f"<b>{index}.</b> <b>{title}</b>{year}{orig_title_text}\n{rating_text}"
+    return f"<b>{index}.</b> <b>{title}</b>{year} <code>[ID: {movie_id}]</code>{orig_title_text}\n{rating_text}"
 
 
 def format_movies_page(movies: List[Dict[str, Any]], page: int, per_page: int) -> str:
@@ -196,7 +197,7 @@ def truncate_text(text: str, max_length: int = 4000) -> str:
 def format_help_message() -> str:
     """Форматирует справочное сообщение."""
     return """
-🎬 <b>Movie Search Bot - Справка</b>
+
 
 <b>🔍 Простой поиск:</b>
 • Поиск по названию фильма
